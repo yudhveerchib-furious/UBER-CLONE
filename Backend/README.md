@@ -61,6 +61,11 @@ Manages incoming requests, extracts inputs, orchestrates validation, calls servi
 - Generates a JWT by calling `user.generateAuthToken()`.
 - Sends back the status code and JSON payload.
 
+### `logOut(req, res)`
+- Clears the authentication token cookie.
+- Adds the token to the `Blacklist` token database collection to invalidate it.
+- Sends back a success JSON response.
+
 ---
 
 ## 4. User Routes (`routes/user.routes.js`)
@@ -77,6 +82,9 @@ Maps URL endpoints to controller methods and enforces validation rules.
 - **Validation Rules**:
   - `email` must be a valid email format.
   - `password` must be at least 6 characters.
+
+### Route definition: `GET /users/logout`
+- **Validation Rules**: Requires authentication via Bearer token or cookie.
 
 ---
 
@@ -138,6 +146,18 @@ Maps URL endpoints to controller methods and enforces validation rules.
       "_id": "6a31856e58cd92928c5211ad",
       "__v": 0
     }
+  }
+  ```
+
+### Logout Request Format (`GET /users/logout`)
+- **Headers**:
+  ```
+  Authorization: Bearer <token>
+  ```
+- **Response (200 OK)**:
+  ```json
+  {
+    "message": "Logged out successfully"
   }
   ```
 
