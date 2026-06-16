@@ -73,44 +73,73 @@ Maps URL endpoints to controller methods and enforces validation rules.
   - `fullname.firstname` must be at least 3 characters.
   - `password` must be at least 6 characters.
 
+### Route definition: `POST /users/login`
+- **Validation Rules**:
+  - `email` must be a valid email format.
+  - `password` must be at least 6 characters.
+
 ---
 
 ## 5. API Endpoint Details & Data Flow
 
 ### How Data is Obtained from the Endpoints
 
-1. **Request Reception**: The client sends a `POST` request to `http://localhost:6000/users/register` with a JSON body.
-2. **Payload Extraction**: The application reads properties from `req.body.fullname` (`firstname`, `lastname`), `req.body.email`, and `req.body.password`.
+1. **Request Reception**: The client sends a `POST` request to `http://localhost:6000/users/register` (registration) or `http://localhost:6000/users/login` (login) with a JSON body.
+2. **Payload Extraction**: The application reads properties from `req.body.fullname` (`firstname`, `lastname` for register), `req.body.email`, and `req.body.password`.
 3. **Response Delivery**: If successful, the API returns a JSON payload containing the authenticated `user` document and their JWT `token` in the response body.
 
-### Request Body Format
-```json
-{
-  "fullname": {
-    "firstname": "John",
-    "lastname": "Doe"
-  },
-  "email": "john.doe@example.com",
-  "password": "securePassword123"
-}
-```
-
-### Response Body Format (Success)
-```json
-{
-  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
-  "user": {
+### Registration Request Format (`POST /users/register`)
+- **Body**:
+  ```json
+  {
     "fullname": {
       "firstname": "John",
       "lastname": "Doe"
     },
     "email": "john.doe@example.com",
-    "password": "$2b$10$...",
-    "_id": "6a31856e58cd92928c5211ad",
-    "__v": 0
+    "password": "securePassword123"
   }
-}
-```
+  ```
+- **Response (201 Created)**:
+  ```json
+  {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "user": {
+      "fullname": {
+        "firstname": "John",
+        "lastname": "Doe"
+      },
+      "email": "john.doe@example.com",
+      "password": "$2b$10$...",
+      "_id": "6a31856e58cd92928c5211ad",
+      "__v": 0
+    }
+  }
+  ```
+
+### Login Request Format (`POST /users/login`)
+- **Body**:
+  ```json
+  {
+    "email": "john.doe@example.com",
+    "password": "securePassword123"
+  }
+  ```
+- **Response (200 OK)**:
+  ```json
+  {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "user": {
+      "fullname": {
+        "firstname": "John",
+        "lastname": "Doe"
+      },
+      "email": "john.doe@example.com",
+      "_id": "6a31856e58cd92928c5211ad",
+      "__v": 0
+    }
+  }
+  ```
 
 ---
 
@@ -120,6 +149,8 @@ The authentication endpoints return the following status codes:
 
 | Status Code | Status Text | Description |
 | :--- | :--- | :--- |
+| **`200`** | `OK` | Login was successful. The token and user information are returned in the response. |
 | **`201`** | `Created` | The user registration was successful. The token and user information are returned in the response. |
 | **`400`** | `Bad Request` | Validation failed (e.g., email invalid, password too short, or name missing). A list of errors is returned. |
+| **`401`** | `Unauthorized` | Invalid email or password during login. |
 | **`500`** | `Internal Server Error` | An unexpected server error occurred (e.g., database connection issues). |
