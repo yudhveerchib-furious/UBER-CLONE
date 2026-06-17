@@ -14,7 +14,13 @@ if (!errors.isEmpty()) {
 
    const { fullname, email, password } = req.body;
    const { firstname, lastname } = fullname || {};
-
+    const isExist = await userModel.findOne({email});
+    
+    if(isExist){
+        return res.status(400).json({
+            message:"already exists"
+        })
+    }
    const hashPassword = await userModel.hashPassword(password)
    
    const user = await userService.createUser({

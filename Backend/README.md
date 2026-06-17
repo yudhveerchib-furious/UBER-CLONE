@@ -36,6 +36,30 @@ Defines the database schema for the `user` collection in MongoDB along with docu
 - **`comparePasword(password)`** (Instance Method): Asynchronously compares a plain-text password with the stored hash using `bcrypt`.
 - **`hashPassword(password)`** (Static Method): Hashes a plain-text password with a salt round of 10.
 
+### Captain Model (`models/captain.model.js`)
+
+Defines the database schema for the `captain` (driver) collection in MongoDB along with document methods and static helper functions.
+
+### Schema Fields
+- **`fullname`** (Object, Required):
+  - **`firstname`** (String, Required): Minimum 3 characters.
+  - **`lastname`** (String, Optional): Minimum 3 characters.
+- **`email`** (String, Required, Unique): Captain's email address.
+- **`password`** (String, Required): Hashed password (hidden by default in queries using `select: false`).
+- **`socketId`** (String, Optional): Socket identifier for real-time features.
+- **`status`** (String, Optional): Status of the captain (`active` or `inactive`, default: `inactive`).
+- **`vehicle`** (Object, Required):
+  - **`color`** (String, Required): Minimum 3 characters.
+  - **`plate`** (String, Required): Minimum 3 characters.
+  - **`capacity`** (Number, Required): Minimum 1 capacity.
+  - **`vehicleType`** (String, Required): Must be one of `car`, `auto`, or `bike`.
+  - **`location`** (Object, Optional): Coordinates containing `lat` (latitude) and `long` (longitude).
+
+### Methods & Statics
+- **`generateAuthToken()`** (Instance Method): Generates a JWT token signed with the captain's `_id` and the `JWT_SECRET` environment variable (expires in 24h).
+- **`comparePasword(password)`** (Instance Method): Asynchronously compares a plain-text password with the stored hash using `bcrypt`.
+- **`hashPassword(password)`** (Static Method): Hashes a plain-text password with a salt round of 10.
+
 ---
 
 ## 2. User Service (`services/user.service.js`)
@@ -46,6 +70,13 @@ Contains pure business logic and handles database operations.
 - Validates that `firstname`, `email`, and `password` are present.
 - Creates a new user document in MongoDB.
 - Returns the created `user` document.
+
+### Captain Service (`services/captain.service.js`)
+
+### `createCaptain({ firstname, lastname, email, password, color, plate, capacity, vehicleType })`
+- Validates that all fields (`firstname`, `email`, `password`, `color`, `plate`, `capacity`, `vehicleType`) are present.
+- Creates a new captain document in MongoDB.
+- Returns the created `captain` document.
 
 ---
 
@@ -66,6 +97,16 @@ Manages incoming requests, extracts inputs, orchestrates validation, calls servi
 - Adds the token to the `Blacklist` token database collection to invalidate it.
 - Sends back a success JSON response.
 
+### Captain Controller (`controllers/captain.controller.js`)
+
+### `registerUser(req, res, next)`
+- Inspects validation results from `express-validator`.
+- Destructures `fullname`, `email`, `password`, and `vehicle` from the request body.
+- Hashes the password by calling `captainModel.hashPassword(password)`.
+- Calls the service `createCaptain(...)` to save the captain.
+- Generates a JWT by calling `captain.generateAuthToken()`.
+- Sends back the status code `201 Created` along with the JWT and captain details.
+
 ---
 
 ## 4. User Routes (`routes/user.routes.js`)
@@ -85,6 +126,18 @@ Maps URL endpoints to controller methods and enforces validation rules.
 
 ### Route definition: `GET /users/logout`
 - **Validation Rules**: Requires authentication via Bearer token or cookie.
+
+### Captain Routes (`routes/captain.routes.js`)
+
+### Route definition: `POST /captains/register`
+- **Validation Rules**:
+  - `email` must be a valid email format.
+  - `fullname.firstname` must be at least 3 characters.
+  - `password` must be at least 6 characters.
+  - `vehicle.color` must be at least 3 characters.
+  - `vehicle.plate` must be at least 3 characters.
+  - `vehicle.capacity` must be an integer and at least 1.
+  - `vehicle.vehicleType` must be one of `['car', 'auto', 'bike']`.
 
 ---
 
@@ -158,6 +211,47 @@ Maps URL endpoints to controller methods and enforces validation rules.
   ```json
   {
     "message": "Logged out successfully"
+  }
+  ```
+
+### Captain Registration Request Format (`POST /captains/register`)
+- **Body**:
+  ```json
+  {
+    "fullname": {
+      "firstname": "Captain",
+      "lastname": "Jack"
+    },
+    "email": "captain.jack.789@example.com",
+    "password": "securepassword123",
+    "vehicle": {
+      "color": "black",
+      "plate": "KA-01-1234",
+      "capacity": 4,
+      "vehicleType": "car"
+    }
+  }
+  ```
+- **Response (201 Created)**:
+  ```json
+  {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "captain": {
+      "fullname": {
+        "firstname": "Captain",
+        "lastname": "Jack"
+      },
+      "email": "captain.jack.789@example.com",
+      "status": "inactive",
+      "vehicle": {
+        "color": "black",
+        "plate": "KA-01-1234",
+        "capacity": 4,
+        "vehicleType": "car"
+      },
+      "_id": "6a32e3d0a5bdec1f035ca288",
+      "__v": 0
+    }
   }
   ```
 
