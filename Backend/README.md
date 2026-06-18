@@ -99,13 +99,29 @@ Manages incoming requests, extracts inputs, orchestrates validation, calls servi
 
 ### Captain Controller (`controllers/captain.controller.js`)
 
-### `registerUser(req, res, next)`
+### `registerCaptain(req, res, next)`
 - Inspects validation results from `express-validator`.
 - Destructures `fullname`, `email`, `password`, and `vehicle` from the request body.
 - Hashes the password by calling `captainModel.hashPassword(password)`.
 - Calls the service `createCaptain(...)` to save the captain.
 - Generates a JWT by calling `captain.generateAuthToken()`.
 - Sends back the status code `201 Created` along with the JWT and captain details.
+
+### `loginCaptain(req, res, next)`
+- Inspects validation results from `express-validator`.
+- Destructures `email` and `password` from the request body.
+- Queries the database for the captain with the given email (selecting the password field).
+- Verifies the password using `comparePasword(password)`.
+- Generates a JWT token using `captain.generateAuthToken()`.
+- Sets the cookie `token` and returns the token and captain object with status code `200 OK`.
+
+### `getCaptainProfile(req, res, next)`
+- Returns the authenticated captain's profile data stored in `req.captain`.
+
+### `logOutCaptain(req, res)`
+- Clears the authentication token cookie.
+- Adds the token to the `Blacklist` token database collection to invalidate it.
+- Sends back a success JSON response.
 
 ---
 
@@ -139,15 +155,75 @@ Maps URL endpoints to controller methods and enforces validation rules.
   - `vehicle.capacity` must be an integer and at least 1.
   - `vehicle.vehicleType` must be one of `['car', 'auto', 'bike']`.
 
+### Route definition: `POST /captains/login`
+- **Validation Rules**:
+  - `email` must be a valid email format.
+  - `password` must be at least 6 characters.
+
+### Route definition: `GET /captains/profile`
+- **Validation Rules**: Requires authentication via Bearer token or cookie.
+
+### Route definition: `GET /captains/logout`
+- **Validation Rules**: Requires authentication via Bearer token or cookie.
+
 ---
 
 ## 5. API Endpoint Details & Data Flow
 
-### How Data is Obtained from the Endpoints
+### User Data Flow Diagram & Explanation
 
-1. **Request Reception**: The client sends a `POST` request to `http://localhost:6000/users/register` (registration) or `http://localhost:6000/users/login` (login) with a JSON body.
-2. **Payload Extraction**: The application reads properties from `req.body.fullname` (`firstname`, `lastname` for register), `req.body.email`, and `req.body.password`.
-3. **Response Delivery**: If successful, the API returns a JSON payload containing the authenticated `user` document and their JWT `token` in the response body.
+```mermaid
+graph TD
+    Client[Client Request] --> Routes[User Routes]
+    Routes -->|Validation Check| Controller[User Controller]
+    Controller -->|Calls| Service[User Service]
+    Service -->|Uses Schema/Methods| Model[User Model]
+    Model -->|Saves to| DB[(MongoDB)]
+```
+
+- **Data Flow Explanation**: 
+  - The Client sends a request to the user routes.
+  - The request passes through input validation.
+  - The user controller extracts the validated payload and calls the user service.
+  - The user service invokes Mongoose model methods to write or query from MongoDB.
+  - The controller signs a JWT token and returns the session payload to the Client.
+
+### Captain Data Flow Diagram & Explanation
+
+```mermaid
+graph TD
+    Client[Client Request] --> Routes[Captain Routes]
+    Routes -->|Validation Check| Controller[Captain Controller]
+    Controller -->|Calls| Service[Captain Service]
+    Service -->|Uses Schema/Methods| Model[Captain Model]
+    Model -->|Saves to| DB[(MongoDB)]
+```
+
+- **Data Flow Explanation**: 
+  - The Client sends a request to the captain routes (e.g. register, login, profile, or logout).
+  - Validation middleware verifies both personal driver fields and vehicle parameters (`color`, `plate`, `capacity`, `vehicleType`).
+  - The captain controller parses the input, hashes the credentials, and coordinates with the captain service.
+  - The captain service persists the driver status (defaulting to `inactive`) and vehicle info to MongoDB.
+  - A JWT token is generated on successful authentication, and the session is returned back to the Client.
+
+---
+
+### How Data is Obtained & Processed between Endpoints
+
+#### For Users:
+1. **Request Reception**: The client sends a request (e.g., `POST /users/register` or `POST /users/login`) with a JSON payload containing user fields.
+2. **Payload Extraction & Validation**: The validation middleware enforces email structure, name length, and password rules. If valid, the controller destructures `fullname` (`firstname`, `lastname`), `email`, and `password` from `req.body`.
+3. **Database & Business Logic**: The controller hashes the password and invokes the user service to create a document in the database. For login, it queries the database and verifies the password hash.
+4. **Token Generation & Response**: A JWT token is generated by the user model method (`generateAuthToken()`). The controller sets the authentication cookie, then responds with `201 Created` or `200 OK` along with the token and user data.
+
+#### For Captains:
+1. **Request Reception**: The client sends a request (e.g., `POST /captains/register` or `POST /captains/login`) with a JSON payload containing captain and vehicle details.
+2. **Payload Extraction & Validation**: Validation middleware verifies driver and vehicle fields. The controller destructures `fullname` (`firstname`, `lastname`), `email`, `password`, and `vehicle` (`color`, `plate`, `capacity`, `vehicleType`).
+3. **Database & Business Logic**: The controller hashes the password and invokes the captain service to save the captain and vehicle details into MongoDB. For login, it queries the captain collection and verifies the credentials using `comparePasword`.
+4. **Token Generation & Response**: A JWT token is generated by the captain model method (`generateAuthToken()`). The controller sets the token cookie and returns status `201 Created` or `200 OK` along with the token and captain object.
+5. **Session/Logout Processing**: For logout, the `authCaptain` middleware verifies the token is not blacklisted. The controller clears the client cookie, extracts the token, and writes it to the `BlacklistToken` collection in MongoDB to invalidate it.
+
+---
 
 ### Registration Request Format (`POST /users/register`)
 - **Body**:
@@ -252,6 +328,74 @@ Maps URL endpoints to controller methods and enforces validation rules.
       "_id": "6a32e3d0a5bdec1f035ca288",
       "__v": 0
     }
+  }
+  ```
+
+### Captain Login Request Format (`POST /captains/login`)
+- **Body**:
+  ```json
+  {
+    "email": "captain.jack.789@example.com",
+    "password": "securepassword123"
+  }
+  ```
+- **Response (200 OK)**:
+  ```json
+  {
+    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+    "captain": {
+      "fullname": {
+        "firstname": "Captain",
+        "lastname": "Jack"
+      },
+      "email": "captain.jack.789@example.com",
+      "status": "inactive",
+      "vehicle": {
+        "color": "black",
+        "plate": "KA-01-1234",
+        "capacity": 4,
+        "vehicleType": "car"
+      },
+      "_id": "6a32e3d0a5bdec1f035ca288",
+      "__v": 0
+    }
+  }
+  ```
+
+### Captain Profile Request Format (`GET /captains/profile`)
+- **Headers**:
+  ```
+  Authorization: Bearer <token>
+  ```
+- **Response (200 OK)**:
+  ```json
+  {
+    "fullname": {
+      "firstname": "Captain",
+      "lastname": "Jack"
+    },
+    "email": "captain.jack.789@example.com",
+    "status": "inactive",
+    "vehicle": {
+      "color": "black",
+      "plate": "KA-01-1234",
+      "capacity": 4,
+      "vehicleType": "car"
+    },
+    "_id": "6a32e3d0a5bdec1f035ca288",
+    "__v": 0
+  }
+  ```
+
+### Captain Logout Request Format (`GET /captains/logout`)
+- **Headers**:
+  ```
+  Authorization: Bearer <token>
+  ```
+- **Response (200 OK)**:
+  ```json
+  {
+    "message": "Logged out successfully"
   }
   ```
 
